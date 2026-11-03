@@ -4,44 +4,54 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() => runApp(const TaskFlowApp());
+void main() {
+  runApp(const TaskFlowApp());
+}
 
-const blue = Color(0xFF3157C8);
-const background = Color(0xFFF3F6FC);
-const green = Color(0xFF16A36A);
-const amber = Color(0xFFF4B544);
+const Color primaryColor = Color(0xFF5546D7);
+const Color pageColor = Color(0xFFF5F5FA);
 
 class TaskFlowApp extends StatelessWidget {
   const TaskFlowApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'TaskFlow',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          scaffoldBackgroundColor: background,
-          colorScheme: ColorScheme.fromSeed(seedColor: blue),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: background,
-            foregroundColor: Color(0xFF172554),
-            elevation: 0,
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'TaskFlow',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: primaryColor),
+        scaffoldBackgroundColor: pageColor,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: pageColor,
+          foregroundColor: Color(0xFF191A2E),
+          elevation: 0,
+          centerTitle: false,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
           ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: const Color(0xFFF7F8FC),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFE5EAF4)),
-            ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
-        home: const TaskHome(),
-      );
+      ),
+      home: const TaskHome(),
+    );
+  }
 }
 
 class Task {
@@ -50,15 +60,13 @@ class Task {
     required this.title,
     required this.description,
     required this.category,
-    this.dueDate,
     this.completed = false,
   });
 
   final String id;
-  String title;
-  String description;
-  String category;
-  DateTime? dueDate;
+  final String title;
+  final String description;
+  final String category;
   bool completed;
 
   Map<String, dynamic> toJson() => {
@@ -66,19 +74,15 @@ class Task {
         'title': title,
         'description': description,
         'category': category,
-        'dueDate': dueDate?.toIso8601String(),
         'completed': completed,
       };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
         id: json['id'].toString(),
-        title: json['title'] ?? '',
-        description: json['description'] ?? '',
-        category: json['category'] ?? 'Other',
-        dueDate: json['dueDate'] == null
-            ? null
-            : DateTime.tryParse(json['dueDate']),
-        completed: json['completed'] == true,
+        title: json['title'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        category: json['category'] as String? ?? 'Personal',
+        completed: json['completed'] as bool? ?? false,
       );
 }
 
@@ -90,589 +94,780 @@ class TaskHome extends StatefulWidget {
 }
 
 class _TaskHomeState extends State<TaskHome> {
-  final tasks = <Task>[];
-  final search = TextEditingController();
-  bool loading = true;
-  bool apiLoading = false;
-  String? error;
-  int tab = 0;
-  String category = 'All';
+  final List<Task> _tasks = [];
+  final TextEditingController _searchController = TextEditingController();
+
+  String _selectedCategory = 'All';
+  bool _loading = true;
+  bool _importing = false;
+
+  final List<String> _categories = [
+    'All',
+    'Work',
+    'Personal',
+    'Study',
+    'Health',
+  ];
 
   @override
   void initState() {
     super.initState();
-    loadTasks();
+    _loadTasks();
   }
 
   @override
   void dispose() {
-    search.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> loadTasks() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('taskflow_tasks');
-      if (raw != null) {
-        final list = jsonDecode(raw) as List;
-        tasks
+  Future<void> _loadTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('taskflow_tasks');
+    if (saved != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(saved) as List<dynamic>;
+        _tasks
           ..clear()
-          ..addAll(list.map((e) => Task.fromJson(e)));
+          ..addAll(decoded.map(
+            (item) => Task.fromJson(item as Map<String, dynamic>),
+          ));
+      } catch (_) {
+        // Ignore invalid saved data and start with an empty task list.
       }
-      if (mounted) setState(() {
-        loading = false;
-        error = null;
-      });
-    } catch (_) {
-      if (mounted) setState(() {
-        loading = false;
-        error = 'Unable to load saved tasks.';
-      });
+    }
+    if (mounted) {
+      setState(() => _loading = false);
     }
   }
 
-  Future<void> saveTasks() async {
+  Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       'taskflow_tasks',
-      jsonEncode(tasks.map((task) => task.toJson()).toList()),
+      jsonEncode(_tasks.map((task) => task.toJson()).toList()),
     );
   }
 
-  Future<void> openForm({Task? task}) async {
+  Future<void> _showTaskForm({Task? task}) async {
+    final titleController = TextEditingController(text: task?.title ?? '');
+    final descriptionController =
+        TextEditingController(text: task?.description ?? '');
+    String category = task?.category ?? 'Personal';
+
     final result = await showDialog<Task>(
       context: context,
-      builder: (_) => TaskForm(task: task),
-    );
-    if (result == null) return;
-    setState(() {
-      if (task == null) {
-        tasks.insert(0, result);
-      } else {
-        final index = tasks.indexWhere((t) => t.id == task.id);
-        if (index >= 0) tasks[index] = result;
-      }
-    });
-    await saveTasks();
-  }
-
-  Future<void> deleteTask(Task task) async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete task?'),
-        content: Text('Delete "${task.title}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(task == null ? 'Add new task' : 'Edit task'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Task title',
+                    hintText: 'What needs to be done?',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descriptionController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Add a few details',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: _categories
+                      .where((item) => item != 'All')
+                      .map((item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => category = value);
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final title = titleController.text.trim();
+                if (title.isEmpty) return;
+                Navigator.pop(
+                  dialogContext,
+                  Task(
+                    id: task?.id ??
+                        DateTime.now().microsecondsSinceEpoch.toString(),
+                    title: title,
+                    description: descriptionController.text.trim(),
+                    category: category,
+                    completed: task?.completed ?? false,
+                  ),
+                );
+              },
+              child: Text(task == null ? 'Add task' : 'Save changes'),
+            ),
+          ],
+        ),
       ),
     );
-    if (yes == true) {
-      setState(() => tasks.removeWhere((t) => t.id == task.id));
-      await saveTasks();
-    }
+
+    titleController.dispose();
+    descriptionController.dispose();
+
+    if (result == null) return;
+
+    setState(() {
+      if (task == null) {
+        _tasks.insert(0, result);
+      } else {
+        final index = _tasks.indexWhere((item) => item.id == task.id);
+        if (index != -1) _tasks[index] = result;
+      }
+    });
+    await _saveTasks();
   }
 
-  Future<void> importApiTasks() async {
-    setState(() {
-      apiLoading = true;
-      error = null;
-    });
+  Future<void> _deleteTask(Task task) async {
+    setState(() => _tasks.removeWhere((item) => item.id == task.id));
+    await _saveTasks();
+  }
+
+  Future<void> _toggleTask(Task task, bool? value) async {
+    setState(() => task.completed = value ?? false);
+    await _saveTasks();
+  }
+
+  Future<void> _importTasks() async {
+    setState(() => _importing = true);
     try {
-      final response = await http
-          .get(Uri.parse('https://jsonplaceholder.typicode.com/todos?_limit=5'))
-          .timeout(const Duration(seconds: 12));
+      final response = await http.get(
+        Uri.parse('https://jsonplaceholder.typicode.com/todos?_limit=5'),
+      );
       if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
+        throw Exception('Server returned ${response.statusCode}');
       }
-      final data = jsonDecode(response.body) as List;
-      var added = 0;
-      for (final row in data) {
-        final item = row as Map<String, dynamic>;
-        final id = 'api-${item['id']}';
-        if (tasks.any((t) => t.id == id)) continue;
-        tasks.add(Task(
-          id: id,
-          title: item['title'] ?? 'Imported task',
-          description: 'Sample task loaded from the REST API.',
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+      final imported = data.map((item) {
+        final map = item as Map<String, dynamic>;
+        return Task(
+          id: 'api-${map['id']}',
+          title: map['title'] as String? ?? 'Imported task',
+          description: 'Imported from the sample task API',
           category: 'Work',
-          completed: item['completed'] == true,
-        ));
-        added++;
-      }
-      await saveTasks();
+          completed: map['completed'] as bool? ?? false,
+        );
+      }).toList();
+
+      setState(() {
+        for (final task in imported.reversed) {
+          if (!_tasks.any((existing) => existing.id == task.id)) {
+            _tasks.insert(0, task);
+          }
+        }
+      });
+      await _saveTasks();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$added API tasks imported.')),
+          const SnackBar(content: Text('Sample tasks imported successfully')),
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => error =
-            'API request failed. Check your internet connection and try again.');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not connect to the sample API.')),
+          SnackBar(content: Text('Could not import tasks: $error')),
         );
       }
     } finally {
-      if (mounted) setState(() => apiLoading = false);
+      if (mounted) setState(() => _importing = false);
     }
   }
 
-  List<Task> get visible {
-    final q = search.text.trim().toLowerCase();
-    return tasks.where((t) {
-      final tabMatch = tab == 0 ||
-          (tab == 1 && !t.completed) ||
-          (tab == 2 && t.completed);
-      final categoryMatch = category == 'All' || t.category == category;
-      final searchMatch = t.title.toLowerCase().contains(q) ||
-          t.description.toLowerCase().contains(q);
-      return tabMatch && categoryMatch && searchMatch;
+  List<Task> get _visibleTasks {
+    final query = _searchController.text.trim().toLowerCase();
+    return _tasks.where((task) {
+      final matchesCategory =
+          _selectedCategory == 'All' || task.category == _selectedCategory;
+      final matchesSearch = task.title.toLowerCase().contains(query) ||
+          task.description.toLowerCase().contains(query);
+      return matchesCategory && matchesSearch;
     }).toList();
   }
 
-  int get completedCount => tasks.where((t) => t.completed).length;
-  int get pendingCount => tasks.length - completedCount;
-
   @override
   Widget build(BuildContext context) {
-    final progress = tasks.isEmpty ? 0.0 : completedCount / tasks.length;
+    final completed = _tasks.where((task) => task.completed).length;
+    final pending = _tasks.length - completed;
+    final progress = _tasks.isEmpty ? 0.0 : completed / _tasks.length;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.check_circle_rounded, color: blue),
-          SizedBox(width: 9),
-          Text('TaskFlow',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-        ]),
-        actions: [
-          IconButton(
-            tooltip: 'Import sample REST API tasks',
-            onPressed: apiLoading ? null : importApiTasks,
-            icon: apiLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.cloud_download_outlined),
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF6F7FB),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => openForm(),
-        backgroundColor: blue,
+        onPressed: () => _showTaskForm(),
+        backgroundColor: primaryColor,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add task'),
+        elevation: 5,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New task', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
-      body: loading
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: loadTasks,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 100),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(21),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [blue, Color(0xFF6485E8)],
+          : SafeArea(
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF7567F8), Color(0xFF4E3CCF)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const Icon(Icons.checklist_rounded,
+                                color: Colors.white, size: 27),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('TASKFLOW',
+                                    style: TextStyle(
+                                      color: Color(0xFF77788C),
+                                      fontSize: 10,
+                                      letterSpacing: 2.2,
+                                      fontWeight: FontWeight.w800,
+                                    )),
+                                SizedBox(height: 2),
+                                Text('Your productivity space',
+                                    style: TextStyle(
+                                      color: Color(0xFF20213A),
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    )),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(color: const Color(0xFFE9EAF2)),
+                            ),
+                            child: IconButton(
+                              tooltip: 'Import sample tasks',
+                              onPressed: _importing ? null : _importTasks,
+                              icon: _importing
+                                  ? const SizedBox(
+                                      width: 19,
+                                      height: 19,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.cloud_download_outlined,
+                                      color: primaryColor),
+                            ),
+                          ),
+                        ],
                       ),
-                      borderRadius: BorderRadius.circular(22),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('YOUR PERSONAL WORKSPACE',
-                            style: TextStyle(
-                                color: Colors.white70,
-                                letterSpacing: 1.1,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11)),
-                        const SizedBox(height: 8),
-                        const Text('Stay productive.',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 26)),
-                        const SizedBox(height: 18),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Your progress',
-                                style: TextStyle(color: Colors.white)),
-                            Text('${(progress * 100).round()}%',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold)),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+                      child: Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6758E8), Color(0xFF4032B5)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(25),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withValues(alpha: 0.22),
+                              blurRadius: 22,
+                              offset: const Offset(0, 10),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 9,
-                            backgroundColor: Colors.white30,
-                            valueColor: const AlwaysStoppedAnimation(
-                                Color(0xFF8DE0C0)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text('Make today count.',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 23,
+                                        fontWeight: FontWeight.w800,
+                                      )),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(Icons.bolt_rounded,
+                                      color: Color(0xFFFFD978), size: 25),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              pending == 0
+                                  ? 'You are all caught up. Keep it going!'
+                                  : 'You have $pending ${pending == 1 ? 'task' : 'tasks'} waiting for you.',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.82),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('DAILY PROGRESS',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.8),
+                                      fontSize: 10,
+                                      letterSpacing: 1.5,
+                                      fontWeight: FontWeight.w800,
+                                    )),
+                                Text('${(progress * 100).round()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    )),
+                              ],
+                            ),
+                            const SizedBox(height: 9),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 8,
+                                backgroundColor: Colors.white.withValues(alpha: 0.22),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Color(0xFFFFD978),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _StatCard(
+                              label: 'TOTAL TASKS',
+                              value: _tasks.length.toString(),
+                              icon: Icons.layers_rounded,
+                              color: const Color(0xFF6758E8),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _StatCard(
+                              label: 'IN PROGRESS',
+                              value: pending.toString(),
+                              icon: Icons.timelapse_rounded,
+                              color: const Color(0xFFE69A35),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _StatCard(
+                              label: 'COMPLETED',
+                              value: completed.toString(),
+                              icon: Icons.task_alt_rounded,
+                              color: const Color(0xFF19A879),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text('Your tasks',
+                                style: TextStyle(
+                                  color: Color(0xFF20213A),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                )),
+                          ),
+                          Text('${_visibleTasks.length} shown',
+                              style: const TextStyle(
+                                color: Color(0xFF85869A),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Search your tasks',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {});
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(color: Color(0xFFE9EAF2)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(color: Color(0xFFE9EAF2)),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(children: [
-                    Expanded(child: StatCard('Total', tasks.length, Icons.list_alt, blue)),
-                    const SizedBox(width: 9),
-                    Expanded(child: StatCard('Pending', pendingCount, Icons.pending_actions, amber)),
-                    const SizedBox(width: 9),
-                    Expanded(child: StatCard('Done', completedCount, Icons.task_alt, green)),
-                  ]),
-                  const SizedBox(height: 23),
-                  const Text('Your tasks',
-                      style:
-                          TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: search,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      hintText: 'Search tasks...',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(spacing: 7, children: [
-                    for (var i = 0; i < 3; i++)
-                      ChoiceChip(
-                        label: Text(['All', 'Pending', 'Completed'][i]),
-                        selected: tab == i,
-                        onSelected: (_) => setState(() => tab = i),
-                        selectedColor: blue,
-                        labelStyle: TextStyle(
-                            color: tab == i ? Colors.white : Colors.black87,
-                            fontWeight: FontWeight.w600),
                       ),
-                  ]),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 39,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: ['All', 'Work', 'Study', 'Personal', 'Other']
-                          .map((c) => Padding(
-                                padding: const EdgeInsets.only(right: 7),
-                                child: ChoiceChip(
-                                  label: Text(c),
-                                  selected: category == c,
-                                  onSelected: (_) =>
-                                      setState(() => category = c),
-                                ),
-                              ))
-                          .toList(),
                     ),
                   ),
-                  if (error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(error!,
-                        style: const TextStyle(color: Colors.red)),
-                  ],
-                  const SizedBox(height: 8),
-                  if (visible.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 58,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _categories.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final category = _categories[index];
+                          final selected = category == _selectedCategory;
+                          return ChoiceChip(
+                            label: Text(category),
+                            selected: selected,
+                            onSelected: (_) =>
+                                setState(() => _selectedCategory = category),
+                            showCheckmark: false,
+                            selectedColor: primaryColor,
+                            backgroundColor: Colors.white,
+                            side: BorderSide(
+                              color: selected
+                                  ? primaryColor
+                                  : const Color(0xFFE7E8F0),
+                            ),
+                            labelStyle: TextStyle(
+                              color: selected ? Colors.white : const Color(0xFF65667A),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          );
+                        },
                       ),
-                      child: const Column(children: [
-                        Icon(Icons.inbox_outlined,
-                            size: 48, color: Colors.blueGrey),
-                        SizedBox(height: 10),
-                        Text('No tasks found',
-                            style: TextStyle(
-                                fontSize: 17, fontWeight: FontWeight.bold)),
-                        Text('Add a task or change your search/filter.'),
-                      ]),
+                    ),
+                  ),
+                  if (_visibleTasks.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _EmptyState(
+                        hasTasks: _tasks.isNotEmpty,
+                        onAdd: () => _showTaskForm(),
+                      ),
                     )
                   else
-                    ...visible.map(buildTaskCard),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final task = _visibleTasks[index];
+                            return _TaskTile(
+                              task: task,
+                              onChanged: (value) => _toggleTask(task, value),
+                              onEdit: () => _showTaskForm(task: task),
+                              onDelete: () => _deleteTask(task),
+                            );
+                          },
+                          childCount: _visibleTasks.length,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
     );
   }
-
-  Widget buildTaskCard(Task task) {
-    final color = task.category == 'Work'
-        ? blue
-        : task.category == 'Study'
-            ? const Color(0xFF8755C7)
-            : task.category == 'Personal'
-                ? green
-                : Colors.blueGrey;
-    return Card(
-      color: Colors.white,
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE9EDF5)),
-      ),
-      child: ListTile(
-        onTap: () => showDetails(task),
-        leading: Checkbox(
-          value: task.completed,
-          activeColor: green,
-          onChanged: (value) async {
-            setState(() => task.completed = value ?? false);
-            await saveTasks();
-          },
-        ),
-        title: Text(task.title,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              decoration:
-                  task.completed ? TextDecoration.lineThrough : null,
-              color: task.completed ? Colors.black45 : const Color(0xFF172554),
-            )),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Wrap(spacing: 7, children: [
-            Chip(
-              label: Text(task.category,
-                  style: TextStyle(color: color, fontSize: 11)),
-              backgroundColor: color.withOpacity(.10),
-              visualDensity: VisualDensity.compact,
-              side: BorderSide.none,
-            ),
-            if (task.dueDate != null)
-              Text(
-                '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}',
-                style: const TextStyle(fontSize: 12),
-              ),
-          ]),
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'edit') openForm(task: task);
-            if (v == 'delete') deleteTask(task);
-            if (v == 'details') showDetails(task);
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'details', child: Text('View details')),
-            PopupMenuItem(value: 'edit', child: Text('Edit')),
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void showDetails(Task task) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 8, 22, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('TASK DETAILS',
-                style: TextStyle(
-                    color: blue,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1)),
-            const SizedBox(height: 12),
-            Text(task.title,
-                style:
-                    const TextStyle(fontSize: 23, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            Text(task.description.isEmpty
-                ? 'No description provided.'
-                : task.description),
-            const SizedBox(height: 12),
-            Text('Category: ${task.category}'),
-            Text('Status: ${task.completed ? 'Completed' : 'Pending'}'),
-            if (task.dueDate != null)
-              Text(
-                  'Due date: ${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}'),
-            const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  openForm(task: task);
-                },
-                icon: const Icon(Icons.edit),
-                label: const Text('Edit task'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-class StatCard extends StatelessWidget {
-  const StatCard(this.label, this.value, this.icon, this.color, {super.key});
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
   final String label;
-  final int value;
+  final String value;
   final IconData icon;
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: const Color(0xFFE9EDF5)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 8),
-          Text('$value',
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 14, 10, 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFECECF3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(value,
+              style: const TextStyle(
+                color: Color(0xFF20213A),
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
+              )),
+          const SizedBox(height: 3),
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.black54)),
-        ]),
-      );
-}
-
-class TaskForm extends StatefulWidget {
-  const TaskForm({super.key, this.task});
-  final Task? task;
-
-  @override
-  State<TaskForm> createState() => _TaskFormState();
-}
-
-class _TaskFormState extends State<TaskForm> {
-  final formKey = GlobalKey<FormState>();
-  late final TextEditingController title;
-  late final TextEditingController description;
-  late String category;
-  DateTime? dueDate;
-
-  @override
-  void initState() {
-    super.initState();
-    title = TextEditingController(text: widget.task?.title ?? '');
-    description =
-        TextEditingController(text: widget.task?.description ?? '');
-    category = widget.task?.category ?? 'Work';
-    dueDate = widget.task?.dueDate;
-  }
-
-  @override
-  void dispose() {
-    title.dispose();
-    description.dispose();
-    super.dispose();
-  }
-
-  Future<void> chooseDate() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: dueDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (date != null) setState(() => dueDate = date);
-  }
-
-  void submit() {
-    if (!formKey.currentState!.validate()) return;
-    final old = widget.task;
-    Navigator.pop(
-      context,
-      Task(
-        id: old?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-        title: title.text.trim(),
-        description: description.text.trim(),
-        category: category,
-        dueDate: dueDate,
-        completed: old?.completed ?? false,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF85869A),
+                fontSize: 9,
+                letterSpacing: 0.5,
+                fontWeight: FontWeight.w800,
+              )),
+        ],
       ),
     );
   }
+}
+
+class _TaskTile extends StatelessWidget {
+  const _TaskTile({
+    required this.task,
+    required this.onChanged,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Task task;
+  final ValueChanged<bool?> onChanged;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  Color get categoryColor {
+    switch (task.category) {
+      case 'Work':
+        return const Color(0xFF4E83D9);
+      case 'Study':
+        return const Color(0xFF8A62D6);
+      case 'Health':
+        return const Color(0xFF19A879);
+      default:
+        return const Color(0xFFE69A35);
+    }
+  }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.task == null ? 'Create task' : 'Edit task'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextFormField(
-                  controller: title,
-                  maxLength: 60,
-                  decoration: const InputDecoration(labelText: 'Task title'),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Please enter a task title'
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: description,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: 'Description (optional)'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: ['Work', 'Study', 'Personal', 'Other']
-                      .map((c) =>
-                          DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => category = v ?? 'Work'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: chooseDate,
-                  icon: const Icon(Icons.calendar_month),
-                  label: Text(dueDate == null
-                      ? 'Choose due date (optional)'
-                      : 'Due: ${dueDate!.day}/${dueDate!.month}/${dueDate!.year}'),
-                ),
-                if (dueDate != null)
-                  TextButton(
-                    onPressed: () => setState(() => dueDate = null),
-                    child: const Text('Clear date'),
-                  ),
-              ]),
+  Widget build(BuildContext context) {
+    final tint = categoryColor;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFECECF3)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF20213A).withValues(alpha: 0.035),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: ListTile(
+          contentPadding: const EdgeInsets.only(left: 10, right: 8),
+          leading: Checkbox(
+            value: task.completed,
+            activeColor: const Color(0xFF19A879),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            onChanged: onChanged,
+          ),
+          title: Text(
+            task.title,
+            style: TextStyle(
+              color: task.completed
+                  ? const Color(0xFF999AAA)
+                  : const Color(0xFF20213A),
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              decoration: task.completed ? TextDecoration.lineThrough : null,
             ),
           ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (task.description.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                  task.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF85869A),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  task.category,
+                  style: TextStyle(
+                    color: tint,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF85869A)),
+            onSelected: (value) {
+              if (value == 'edit') onEdit();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit task')),
+              PopupMenuItem(value: 'delete', child: Text('Delete task')),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: submit,
-              child: Text(widget.task == null ? 'Create' : 'Save changes')),
-        ],
-      );
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.hasTasks, required this.onAdd});
+
+  final bool hasTasks;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 82,
+              height: 82,
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.09),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: const Icon(Icons.task_alt_rounded,
+                  size: 43, color: primaryColor),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              hasTasks ? 'No matching tasks' : 'A clear space to start',
+              style: const TextStyle(
+                color: Color(0xFF20213A),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              hasTasks
+                  ? 'Try another search or category.'
+                  : 'Add your first task and make today productive.',
+              style: const TextStyle(color: Color(0xFF85869A), fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            if (!hasTasks) ...[
+              const SizedBox(height: 18),
+              ElevatedButton(
+                onPressed: onAdd,
+                child: const Text('Create first task'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
