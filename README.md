@@ -35,3 +35,46 @@ This project is a basic Flutter application developed for the Week 1 Flutter Fro
 ## Limitations
 
 This is a front-end demonstration. Login is not connected to a real authentication service, and profile changes are not permanently stored.
+
+
+
+# Week 2 – TaskFlow: Task Management Application
+
+## Project Overview
+
+TaskFlow is a Flutter-based task management application designed to help users organize, track, and manage their daily activities through a clean and user-friendly interface.
+
+## Features Implemented
+
+* **Task Creation:** Add new tasks with titles, descriptions, and categories.
+* **Task Editing:** Update existing task details.
+* **Task Deletion:** Remove tasks when they are no longer required.
+* **Task Completion:** Mark tasks as completed or pending.
+* **Search Functionality:** Search tasks using keywords.
+* **Category Filtering:** Filter tasks based on categories.
+* **Local Data Persistence:** Store tasks using SharedPreferences so they remain available after restarting the application.
+* **API Integration:** Fetch sample tasks from the JSONPlaceholder API.
+* **Dashboard:** Display task statistics, progress, and task information.
+* **Responsive UI:** Implement a modern interface using Flutter widgets and styling.
+
+## Technologies Used
+
+* Flutter
+* Dart
+* SharedPreferences
+* HTTP Package
+* JSONPlaceholder REST API
+
+## Testing and Build
+
+* Successfully executed Flutter widget tests.
+* Successfully generated the release web build using `flutter build web --release`.
+* Tested the application in Google Chrome.
+
+## Project Outcome
+
+Successfully developed a functional task management application with CRUD operations, local storage, API integration, search, filtering, and a modern dashboard interface.
+
+## Screenshots
+
+Application screenshots are available in the `screenshots` folder.
