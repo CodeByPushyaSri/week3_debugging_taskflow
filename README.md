@@ -78,3 +78,173 @@ Successfully developed a functional task management application with CRUD operat
 ## Screenshots
 
 Application screenshots are available in the `screenshots` folder.
+
+
+# TaskFlow – Week 3: Debugging & Testing
+
+## 1. Project Overview
+
+TaskFlow is a Flutter-based task management application developed to help users organize, track, and manage their daily activities.
+
+This Week 3 project focuses on debugging, identifying issues, implementing fixes, and testing application functionality.
+
+## 2. Technologies Used
+
+- Flutter
+- Dart
+- Visual Studio Code
+- SharedPreferences
+- HTTP package
+- JSONPlaceholder API
+- Flutter Widget Testing
+
+## 3. Features
+
+- Create new tasks.
+- Edit existing tasks.
+- Delete tasks.
+- Mark tasks as completed.
+- Search tasks by title or description.
+- Filter tasks by category.
+- Import sample tasks using an API.
+- Save tasks locally using SharedPreferences.
+- Display task statistics and progress.
+- Validate empty task titles.
+
+## 4. Project Structure
+
+```text
+week3_debugging_taskflow/
+│
+├── android/
+├── ios/
+├── lib/
+│   └── main.dart
+│
+├── test/
+│   └── widget_test.dart
+│
+├── web/
+├── windows/
+├── screenshots/
+│
+├── pubspec.yaml
+├── pubspec.lock
+├── analysis_options.yaml
+└── README.md
+```
+
+## 5. Installation and Setup
+
+### Step 1: Install Dependencies
+
+Open the project in Visual Studio Code and run:
+
+```bash
+flutter pub get
+```
+
+### Step 2: Run the Application
+
+To launch the application in Google Chrome:
+
+```bash
+flutter run -d chrome
+```
+
+### Step 3: Analyze the Code
+
+Run Flutter analyzer:
+
+```bash
+flutter analyze
+```
+
+### Step 4: Execute Tests
+
+Run the automated widget tests:
+
+```bash
+flutter test
+```
+
+## 6. Debugging and Bug Identification
+
+The application was manually tested to identify functional issues.
+
+### Identified Issue: Empty Task Title Validation
+
+**Problem:**
+
+When users attempted to create a task without entering a title, the application rejected the submission but initially did not display clear validation feedback.
+
+**Expected Behaviour:**
+
+The application should display a validation message when the task title is empty.
+
+**Fix Implemented:**
+
+Added form validation using Flutter's TextFormField validator.
+
+**Validation Message:**
+
+"Please enter a task title"
+
+**Result:**
+
+The validation message was manually verified in the application. Empty and whitespace-only titles are rejected.
+
+## 7. Manual Testing Results
+
+| Test Case | Expected Result | Status |
+|---|---|---|
+| Launch application | Application opens successfully | Passed |
+| Create task | New task is added | Passed |
+| Edit task | Task details are updated | Passed |
+| Delete task | Selected task is removed | Passed |
+| Complete task | Task status changes | Passed |
+| Search tasks | Matching tasks are displayed | Passed |
+| Category filtering | Correct category tasks are displayed | Passed |
+| API import | Sample tasks are imported | Passed |
+| Data persistence | Tasks remain after refresh | Passed |
+| Empty title validation | Validation message is displayed | Passed |
+| Whitespace-only title | Task creation is rejected | Passed |
+
+## 8. Automated Testing
+
+The project includes a Flutter widget test in:
+
+`test/widget_test.dart`
+
+The automated test verifies that the TaskFlow application loads successfully and that the TaskHome widget is displayed.
+
+**Command:**
+
+```bash
+flutter test
+```
+
+**Final Test Result:**
+
+```text
+All tests passed!
+```
+
+Note: The final automated test covers application loading. The empty-title validation was verified manually; its earlier dedicated widget test did not pass.
+
+## 9. Flutter Analyzer Results
+
+The Flutter analyzer identified two informational lint issues:
+
+1. Deprecated use of the `value` parameter. The analyzer recommends using `initialValue`.
+2. Unnecessary use of multiple underscores.
+
+These are informational warnings and did not prevent the application from running or the final widget test from passing.
+
+## 10. Conclusion
+
+The Week 3 debugging and testing activity involved reviewing the TaskFlow application, identifying a validation issue, implementing improved form validation, and performing manual and automated testing.
+
+The application was successfully executed in Google Chrome, and the final Flutter widget test completed successfully.
+
+The project demonstrates practical experience with Flutter debugging, form validation, widget testing, API integration, and application testing.

@@ -153,6 +153,7 @@ class _TaskHomeState extends State<TaskHome> {
     final titleController = TextEditingController(text: task?.title ?? '');
     final descriptionController =
         TextEditingController(text: task?.description ?? '');
+    final formKey = GlobalKey<FormState>();
     String category = task?.category ?? 'Personal';
 
     final result = await showDialog<Task>(
@@ -161,44 +162,56 @@ class _TaskHomeState extends State<TaskHome> {
         builder: (context, setDialogState) => AlertDialog(
           title: Text(task == null ? 'Add new task' : 'Edit task'),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Task title',
-                    hintText: 'What needs to be done?',
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: titleController,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Task title',
+                      hintText: 'What needs to be done?',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter a task title';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'Add a few details',
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descriptionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      hintText: 'Add a few details',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: _categories
-                      .where((item) => item != 'All')
-                      .map((item) => DropdownMenuItem(
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: category,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: _categories
+                        .where((item) => item != 'All')
+                        .map(
+                          (item) => DropdownMenuItem(
                             value: item,
                             child: Text(item),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => category = value);
-                    }
-                  },
-                ),
-              ],
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => category = value);
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -208,8 +221,11 @@ class _TaskHomeState extends State<TaskHome> {
             ),
             ElevatedButton(
               onPressed: () {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+
                 final title = titleController.text.trim();
-                if (title.isEmpty) return;
                 Navigator.pop(
                   dialogContext,
                   Task(
